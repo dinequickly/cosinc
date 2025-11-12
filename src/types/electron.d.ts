@@ -1,4 +1,4 @@
-export interface ElectronAPI {
+interface ElectronAPI {
   updateContentDimensions: (dimensions: {
     width: number
     height: number
@@ -24,7 +24,35 @@ export interface ElectronAPI {
   moveWindowDown: () => Promise<void>
   analyzeAudioFromBase64: (data: string, mimeType: string) => Promise<{ text: string; timestamp: number }>
   analyzeAudioFile: (path: string) => Promise<{ text: string; timestamp: number }>
+  analyzeImageFile: (path: string) => Promise<void>
   quitApp: () => Promise<void>
+
+  // LLM Model Management
+  getCurrentLlmConfig: () => Promise<{ provider: "ollama" | "gemini"; model: string; isOllama: boolean }>
+  getAvailableOllamaModels: () => Promise<string[]>
+  switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>
+  switchToGemini: (apiKey?: string) => Promise<{ success: boolean; error?: string }>
+  testLlmConnection: () => Promise<{ success: boolean; error?: string }>
+
+  // Context Capture
+  captureStart: () => Promise<{ success: boolean; error?: string }>
+  captureList: () => Promise<Array<{
+    id: string;
+    timestamp: Date;
+    appName: string;
+    windowTitle: string;
+    tabsCount: number;
+    hasClipboard: boolean;
+    webhookSent: boolean;
+    screenshotPath: string;
+  }>>
+  captureGet: (captureId: string) => Promise<any>
+  captureDelete: (captureId: string) => Promise<{ success: boolean; error?: string }>
+  captureRetryWebhook: (captureId: string) => Promise<{ success: boolean; error?: string }>
+  captureCleanupOld: (daysOld?: number) => Promise<{ success: boolean; deletedCount?: number; error?: string }>
+  captureGetStats: () => Promise<{ totalCaptures: number; unsentCaptures: number; dbSizeKB: number }>
+  onContextCaptured: (callback: (data: { captureId: string; context: any }) => void) => () => void
+
   invoke: (channel: string, ...args: any[]) => Promise<any>
 }
 

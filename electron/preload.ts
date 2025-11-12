@@ -41,7 +41,26 @@ interface ElectronAPI {
   switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>
   switchToGemini: (apiKey?: string) => Promise<{ success: boolean; error?: string }>
   testLlmConnection: () => Promise<{ success: boolean; error?: string }>
-  
+
+  // Context Capture
+  captureStart: () => Promise<{ success: boolean; error?: string }>
+  captureList: () => Promise<Array<{
+    id: string;
+    timestamp: Date;
+    appName: string;
+    windowTitle: string;
+    tabsCount: number;
+    hasClipboard: boolean;
+    webhookSent: boolean;
+    screenshotPath: string;
+  }>>
+  captureGet: (captureId: string) => Promise<any>
+  captureDelete: (captureId: string) => Promise<{ success: boolean; error?: string }>
+  captureRetryWebhook: (captureId: string) => Promise<{ success: boolean; error?: string }>
+  captureCleanupOld: (daysOld?: number) => Promise<{ success: boolean; deletedCount?: number; error?: string }>
+  captureGetStats: () => Promise<{ totalCaptures: number; unsentCaptures: number; dbSizeKB: number }>
+  onContextCaptured: (callback: (data: { captureId: string; context: any }) => void) => () => void
+
   invoke: (channel: string, ...args: any[]) => Promise<any>
 }
 
@@ -186,6 +205,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
   switchToOllama: (model?: string, url?: string) => ipcRenderer.invoke("switch-to-ollama", model, url),
   switchToGemini: (apiKey?: string) => ipcRenderer.invoke("switch-to-gemini", apiKey),
   testLlmConnection: () => ipcRenderer.invoke("test-llm-connection"),
-  
+
+  // Context Capture
+  captureStart: () => ipcRenderer.invoke("capture:start"),
+  captureList: () => ipcRenderer.invoke("capture:list"),
+  captureGet: (captureId: string) => ipcRenderer.invoke("capture:get", captureId),
+  captureDelete: (captureId: string) => ipcRenderer.invoke("capture:delete", captureId),
+  captureRetryWebhook: (captureId: string) => ipcRenderer.invoke("capture:retry-webhook", captureId),
+  captureCleanupOld: (daysOld?: number) => ipcRenderer.invoke("capture:cleanup-old", daysOld),
+  captureGetStats: () => ipcRenderer.invoke("capture:get-stats"),
+  onContextCaptured: (callback: (data: { captureId: string; context: any }) => void) => {
+    const subscription = (_: any, data: { captureId: string; context: any }) => callback(data)
+    ipcRenderer.on("context-captured", subscription)
+    return () => {
+      ipcRenderer.removeListener("context-captured", subscription)
+    }
+  },
+
   invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args)
 } as ElectronAPI)

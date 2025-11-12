@@ -4,6 +4,8 @@ import { WindowHelper } from "./WindowHelper"
 import { ScreenshotHelper } from "./ScreenshotHelper"
 import { ShortcutsHelper } from "./shortcuts"
 import { ProcessingHelper } from "./ProcessingHelper"
+import { DatabaseHelper } from "./DatabaseHelper"
+import { ContextAggregator } from "./services/ContextAggregator"
 
 export class AppState {
   private static instance: AppState | null = null
@@ -12,6 +14,8 @@ export class AppState {
   private screenshotHelper: ScreenshotHelper
   public shortcutsHelper: ShortcutsHelper
   public processingHelper: ProcessingHelper
+  private databaseHelper: DatabaseHelper
+  private contextAggregator: ContextAggregator
   private tray: Tray | null = null
 
   // View management
@@ -57,6 +61,12 @@ export class AppState {
 
     // Initialize ShortcutsHelper
     this.shortcutsHelper = new ShortcutsHelper(this)
+
+    // Initialize DatabaseHelper
+    this.databaseHelper = new DatabaseHelper()
+
+    // Initialize ContextAggregator
+    this.contextAggregator = new ContextAggregator(this.databaseHelper)
   }
 
   public static getInstance(): AppState {
@@ -102,6 +112,14 @@ export class AppState {
 
   public getExtraScreenshotQueue(): string[] {
     return this.screenshotHelper.getExtraScreenshotQueue()
+  }
+
+  public getDatabaseHelper(): DatabaseHelper {
+    return this.databaseHelper
+  }
+
+  public getContextAggregator(): ContextAggregator {
+    return this.contextAggregator
   }
 
   // Window management methods
@@ -180,6 +198,41 @@ export class AppState {
 
   public centerAndShowWindow(): void {
     this.windowHelper.centerAndShowWindow()
+  }
+
+  // Context capture method
+  public async captureContext(): Promise<void> {
+    console.log('[AppState] Capturing context...')
+    const mainWindow = this.getMainWindow()
+
+    try {
+      const result = await this.contextAggregator.captureContext(
+        'hotkey',
+        () => this.hideMainWindow(),
+        () => this.showMainWindow()
+      )
+
+      if (result.success && mainWindow && !mainWindow.isDestroyed()) {
+        console.log('[AppState] Context captured successfully:', result.captureId)
+
+        // Get the captured context
+        const context = this.contextAggregator.getLatestCapture()
+
+        // Switch to capture view and notify renderer
+        this.setView('queue') // We'll use queue view for now, can add capture view later
+        mainWindow.webContents.send('context-captured', {
+          captureId: result.captureId,
+          context
+        })
+
+        // Show the window to display results
+        this.showMainWindow()
+      } else {
+        console.error('[AppState] Context capture failed:', result.error)
+      }
+    } catch (error) {
+      console.error('[AppState] Error capturing context:', error)
+    }
   }
 
   public createTray(): void {
@@ -274,8 +327,17 @@ async function initializeApp() {
   // Initialize IPC handlers before window creation
   initializeIpcHandlers(appState)
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     console.log("App is ready")
+
+    // Run cleanup of old captures on startup
+    try {
+      const deletedCount = await appState.getContextAggregator().cleanupOldCaptures(30)
+      console.log(`Cleaned up ${deletedCount} old captures on startup`)
+    } catch (error) {
+      console.error('Error during startup cleanup:', error)
+    }
+
     appState.createWindow()
     appState.createTray()
     // Register global shortcuts using ShortcutsHelper

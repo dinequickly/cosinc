@@ -196,4 +196,93 @@ export function initializeIpcHandlers(appState: AppState): void {
       return { success: false, error: error.message };
     }
   });
+
+  // Context Capture Handlers
+  ipcMain.handle("capture:start", async () => {
+    try {
+      console.log("[IPC] Manual capture triggered");
+      await appState.captureContext();
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error in capture:start handler:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle("capture:list", async () => {
+    try {
+      const dbHelper = appState.getDatabaseHelper();
+      const captures = dbHelper.getCaptures(100);
+
+      // Convert to a more frontend-friendly format
+      return captures.map(capture => ({
+        id: capture.id,
+        timestamp: new Date(capture.timestamp),
+        appName: capture.app_name,
+        windowTitle: capture.window_title,
+        tabsCount: capture.tabs_count,
+        hasClipboard: capture.has_clipboard === 1,
+        webhookSent: capture.webhook_sent === 1,
+        screenshotPath: capture.screenshot_path
+      }));
+    } catch (error: any) {
+      console.error("Error in capture:list handler:", error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("capture:get", async (event, captureId: string) => {
+    try {
+      const aggregator = appState.getContextAggregator();
+      const capture = await aggregator.loadCapture(captureId);
+      return capture;
+    } catch (error: any) {
+      console.error("Error in capture:get handler:", error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle("capture:delete", async (event, captureId: string) => {
+    try {
+      const aggregator = appState.getContextAggregator();
+      const result = await aggregator.deleteCapture(captureId);
+      return result;
+    } catch (error: any) {
+      console.error("Error in capture:delete handler:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle("capture:retry-webhook", async (event, captureId: string) => {
+    try {
+      const aggregator = appState.getContextAggregator();
+      const result = await aggregator.retryWebhook(captureId);
+      return result;
+    } catch (error: any) {
+      console.error("Error in capture:retry-webhook handler:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle("capture:cleanup-old", async (event, daysOld: number = 30) => {
+    try {
+      const aggregator = appState.getContextAggregator();
+      const deletedCount = await aggregator.cleanupOldCaptures(daysOld);
+      return { success: true, deletedCount };
+    } catch (error: any) {
+      console.error("Error in capture:cleanup-old handler:", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle("capture:get-stats", async () => {
+    try {
+      const dbHelper = appState.getDatabaseHelper();
+      const stats = dbHelper.getStats();
+      return stats;
+    } catch (error: any) {
+      console.error("Error in capture:get-stats handler:", error);
+      throw error;
+    }
+  });
 }

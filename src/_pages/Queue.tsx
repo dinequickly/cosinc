@@ -36,6 +36,10 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [currentModel, setCurrentModel] = useState<{ provider: string; model: string }>({ provider: "gemini", model: "gemini-2.0-flash" })
 
+  // Capture context state
+  const [latestCapture, setLatestCapture] = useState<any>(null)
+  const [isCaptureVisible, setIsCaptureVisible] = useState(false)
+
   const barRef = useRef<HTMLDivElement>(null)
 
   const { data: screenshots = [], refetch } = useQuery<Array<{ path: string; preview: string }>, Error>(
@@ -163,6 +167,18 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
     }
   }, [isTooltipVisible, tooltipHeight])
 
+  // Listen for context captured events
+  useEffect(() => {
+    // @ts-ignore - Type will be available at runtime
+    const unsubscribe = window.electronAPI.onContextCaptured?.((data: any) => {
+      console.log('Context captured:', data)
+      setLatestCapture(data.context)
+      setIsCaptureVisible(true)
+      showToast("Context Captured", "Successfully captured context!", "neutral")
+    })
+    return () => unsubscribe?.()
+  }, [])
+
   // Seamless screenshot-to-LLM flow
   useEffect(() => {
     // Listen for screenshot taken event
@@ -207,12 +223,22 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
     setCurrentModel({ provider, model })
     // Update chat messages to reflect the model change
     const modelName = provider === "ollama" ? model : "Gemini 2.0 Flash"
-    setChatMessages((msgs) => [...msgs, { 
-      role: "gemini", 
-      text: `🔄 Switched to ${provider === "ollama" ? "🏠" : "☁️"} ${modelName}. Ready for your questions!` 
+    setChatMessages((msgs) => [...msgs, {
+      role: "gemini",
+      text: `🔄 Switched to ${provider === "ollama" ? "🏠" : "☁️"} ${modelName}. Ready for your questions!`
     }])
   }
 
+  const handleCaptureContext = async () => {
+    try {
+      showToast("Capturing...", "Capturing context data...", "neutral")
+      // @ts-ignore - Type will be available at runtime
+      await window.electronAPI.captureStart?.()
+    } catch (error) {
+      console.error("Error capturing context:", error)
+      showToast("Error", "Failed to capture context", "error")
+    }
+  }
 
   return (
     <div
@@ -322,6 +348,77 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
               </button>
             </form>
           </div>
+          )}
+
+          {/* Context Capture Button */}
+          <div className="mt-4 w-full mx-auto">
+            <button
+              onClick={handleCaptureContext}
+              className="w-full px-4 py-2 rounded-lg bg-gradient-to-r from-blue-500/80 to-purple-500/80 hover:from-blue-600/80 hover:to-purple-600/80 text-white text-sm font-medium transition-all duration-200 backdrop-blur-sm shadow-lg border border-white/20"
+            >
+              📸 Capture Context (Cmd+Shift+C)
+            </button>
+          </div>
+
+          {/* Display Latest Capture */}
+          {isCaptureVisible && latestCapture && (
+            <div className="mt-4 w-full mx-auto liquid-glass p-4">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-sm font-semibold text-gray-800">Latest Capture</h3>
+                <button
+                  onClick={() => setIsCaptureVisible(false)}
+                  className="text-gray-500 hover:text-gray-700 text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-2 text-xs text-gray-700">
+                <div>
+                  <span className="font-medium">App:</span> {latestCapture.activeWindow.app}
+                </div>
+                <div>
+                  <span className="font-medium">Window:</span> {latestCapture.activeWindow.title}
+                </div>
+                <div>
+                  <span className="font-medium">Browser Tabs:</span> {latestCapture.browserTabs.length}
+                </div>
+                <div>
+                  <span className="font-medium">Clipboard:</span> {latestCapture.clipboard ? 'Yes' : 'No'}
+                </div>
+                <div>
+                  <span className="font-medium">Time:</span> {new Date(latestCapture.timestamp).toLocaleTimeString()}
+                </div>
+
+                {latestCapture.browserTabs.length > 0 && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer font-medium text-blue-600 hover:text-blue-800">
+                      View Browser Tabs ({latestCapture.browserTabs.length})
+                    </summary>
+                    <div className="mt-2 pl-4 space-y-1 max-h-32 overflow-y-auto">
+                      {latestCapture.browserTabs.map((tab: any, idx: number) => (
+                        <div key={idx} className="text-xs">
+                          <div className="font-medium truncate">{tab.title}</div>
+                          <div className="text-gray-500 truncate">{tab.url}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+
+                {latestCapture.clipboard && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer font-medium text-blue-600 hover:text-blue-800">
+                      View Clipboard
+                    </summary>
+                    <div className="mt-2 pl-4 text-xs bg-white/50 p-2 rounded max-h-24 overflow-y-auto">
+                      {latestCapture.clipboard.text.substring(0, 500)}
+                      {latestCapture.clipboard.text.length > 500 && '...'}
+                    </div>
+                  </details>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>

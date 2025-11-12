@@ -15,6 +15,16 @@ export class ShortcutsHelper {
       this.appState.centerAndShowWindow()
     })
 
+    // Add global shortcut to capture context
+    globalShortcut.register("CommandOrControl+Shift+C", async () => {
+      console.log("Capture context shortcut pressed...")
+      try {
+        await this.appState.captureContext()
+      } catch (error) {
+        console.error("Error capturing context:", error)
+      }
+    })
+
     globalShortcut.register("CommandOrControl+H", async () => {
       const mainWindow = this.appState.getMainWindow()
       if (mainWindow) {
